@@ -1,29 +1,13 @@
-print("APP.PY LOADED")
-
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+import os
 from dotenv import load_dotenv
+from fastapi import APIRouter
+from pydantic import BaseModel
 from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-import os
 
 load_dotenv()
 
-app = FastAPI(title="Mock Interview API")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+router = APIRouter()
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
@@ -52,17 +36,15 @@ class ChatResponse(BaseModel):
     reply: str
 
 
-@app.get("/")
-def root():
-    return {"message": "Mock Interview API is running"}
-
-
-@app.get("/api/health")
+@router.get("/api/health")
 def health():
-    return {"status": "ok", "groq_api_key_found": bool(GROQ_API_KEY)}
+    return {
+        "status": "ok",
+        "groq_api_key_found": bool(GROQ_API_KEY)
+    }
 
 
-@app.post("/api/chat", response_model=ChatResponse)
+@router.post("/api/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
     try:
         if not req.message.strip():
@@ -81,7 +63,7 @@ def chat(req: ChatRequest):
         return ChatResponse(reply=f"Backend error: {str(e)}")
 
 
-@app.post("/api/reset/{session_id}")
+@router.post("/api/reset/{session_id}")
 def reset_chat(session_id: str):
     sessions[session_id] = [SystemMessage(content=SYSTEM_PROMPT)]
     return {"message": "Session reset successful"}
