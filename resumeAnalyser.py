@@ -5,14 +5,37 @@ import tempfile
 from typing import List, Dict, Any, Optional
 
 from dotenv import load_dotenv
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pypdf import PdfReader
 from langchain_groq import ChatGroq
-from langchain_core.messages import HumanMessage
 
 load_dotenv()
 
-router = APIRouter()
+app = FastAPI(title="Resume Analyzer API")
+
+
+# =========================================================
+# CORS
+# =========================================================
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:5175",
+        "http://localhost:8000",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+        "http://127.0.0.1:5175",
+        "http://127.0.0.1:8000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # =========================================================
@@ -202,6 +225,7 @@ def calculate_ats_analysis(
     word_count = len(resume_text.split())
     job_titles_found = extract_possible_job_titles(resume_text)
 
+    # 1) JD MATCH SCORE (0 to 50)
     jd_score = 0
 
     if jd_keywords:
@@ -235,6 +259,7 @@ def calculate_ats_analysis(
 
     jd_score = min(jd_score, 50)
 
+    # 2) ATS PARSABILITY SCORE (0 to 30)
     ats_parsability = 0
 
     if email:
@@ -282,6 +307,7 @@ def calculate_ats_analysis(
 
     ats_parsability = min(ats_parsability, 30)
 
+    # 3) CONTENT QUALITY SCORE (0 to 20)
     content_quality = 0
 
     if len(skills) >= 8:
@@ -314,6 +340,7 @@ def calculate_ats_analysis(
 
     content_quality = min(content_quality, 20)
 
+    # FINAL SCORE
     final_score = jd_score + ats_parsability + content_quality
 
     if not jd_keywords:
@@ -401,7 +428,7 @@ Rules:
 - No extra text before or after JSON.
 """
 
-    response = llm.invoke([HumanMessage(content=prompt)])
+    response = llm.invoke(prompt)
     return parse_llm_json(response.content)
 
 
@@ -467,10 +494,7 @@ def analyze_resume_file(pdf_path: str, job_description: str = "") -> Dict[str, A
     groq_api_key = os.getenv("GROQ_API_KEY")
     if groq_api_key:
         try:
-            llm = ChatGroq(
-                model="llama-3.1-8b-instant",
-                api_key=groq_api_key
-            )
+            llm = ChatGroq(model="llama-3.1-8b-instant")
             llm_feedback = generate_llm_feedback(llm, cleaned_text, base_analysis)
         except Exception:
             pass
@@ -527,12 +551,12 @@ def analyze_resume_file(pdf_path: str, job_description: str = "") -> Dict[str, A
 # =========================================================
 # Routes
 # =========================================================
-@router.get("/api/resume-health")
-def resume_health():
-    return {"status": "ok", "service": "resume-analyzer"}
+@app.get("/")
+def home():
+    return {"message": "Resume Analyzer API is running"}
 
 
-@router.post("/api/analyze-resume")
+@app.post("/analyze-resume")
 async def analyze_resume(
     resume: UploadFile = File(...),
     job_description: str = Form("")
@@ -579,3 +603,4 @@ async def analyze_resume(
     finally:
         if temp_file_path and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
+# this code should be backend code only no? then why error still```
